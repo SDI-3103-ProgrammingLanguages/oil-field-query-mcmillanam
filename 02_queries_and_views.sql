@@ -12,12 +12,21 @@
 DROP VIEW IF EXISTS v1_leases;
 -- CREATE VIEW v1_leases AS
 -- SELECT ... FROM leases;
+CREATE VIEW v1_leases AS
+SELECT lease_name, county, state, ROUND(royalty_rate*100, 1) AS royalty_rate_pct FROM leases
+WHERE state = 'OK' ORDER BY royalty_rate_pct DESC;
 
 -- 2) v2_active_wells(lease_name, well_name, api_number, operator_name)
 -- Hint: JOIN wells→leases→operators. Filter WHERE status='ACTIVE'.
 DROP VIEW IF EXISTS v2_active_wells;
 -- CREATE VIEW v2_active_wells AS
 -- SELECT ... FROM ... JOIN ... WHERE ...;
+CREATE VIEW v2_active_wells AS
+SELECT l.lease_name, w.well_name, w.api_number, o.operator_name
+FROM leases l
+JOIN wells w ON l.id = w.lease_id
+JOIN operators o ON o.id = w.operator_id
+WHERE status = 'ACTIVE'; 
 
 -- 3) v3_last_month_oil(well_name, prod_month, oil_bbl)
 -- Hint: Use a CTE or subquery to get MAX(prod_month) from monthly_production.
@@ -25,6 +34,12 @@ DROP VIEW IF EXISTS v3_last_month_oil;
 -- CREATE VIEW v3_last_month_oil AS
 -- WITH maxm AS (SELECT MAX(prod_month) AS m FROM monthly_production)
 -- SELECT ... WHERE m.prod_month=(SELECT m FROM maxm);
+CREATE VIEW v3_last_month_oil AS
+WITH maxm AS (SELECT MAX(prod_month) AS m FROM monthly_production)
+SELECT w.well_name, mp.prod_month, mp.oil_bbl FROM wells w
+JOIN monthly_production mp ON mp.well_id = w.id 
+JOIN maxm ON mp.prod_month = maxm.m
+ORDER BY w.well_name ASC;
 
 -- 4) v4_lease_totals_last_month(lease_name, prod_month, total_oil_bbl)
 -- Hint: leases→wells→monthly_production, GROUP BY lease.
@@ -32,9 +47,17 @@ DROP VIEW IF EXISTS v4_lease_totals_last_month;
 -- CREATE VIEW v4_lease_totals_last_month AS
 -- WITH maxm AS (...)
 -- SELECT l.lease_name, (SELECT m FROM maxm) AS prod_month, SUM(m.oil_bbl) AS total_oil_bbl
--- FROM monthly_production m JOIN wells w ON ... JOIN leases l ON ...
+-- FROM monthly_production m JOIN wells w ON ... JlOIN leases l ON ...
 -- WHERE m.prod_month=(SELECT m FROM maxm)
 -- GROUP BY l.id, l.lease_name;
+CREATE VIEW v4_lease_totals_last_month AS
+WITH maxm AS (SELECT MAX(prod_month) AS m FROM monthly_production)
+SELECT l.lease_name, (SELECT m FROM maxm) AS prod_month, SUM(m.oil_bbl) AS total_oil_bbl
+FROM monthly_production m
+JOIN wells w ON w.id = m.well_id
+JOIN leases l ON l.id = w.lease_id
+WHERE m.prod_month = (SELECT m FROM maxm)
+GROUP BY l.id, l.lease_name;
 
 -- 5) v5_avg_oil_by_well(well_name, avg_oil_bbl)
 -- Hint: AVG over all months; ROUND to 1 decimal.
@@ -43,6 +66,10 @@ DROP VIEW IF EXISTS v5_avg_oil_by_well;
 -- SELECT w.well_name, ROUND(AVG(m.oil_bbl),1) AS avg_oil_bbl
 -- FROM monthly_production m JOIN wells w ON ...
 -- GROUP BY w.id, w.well_name;
+CREATE VIEW v5_avg_oil_by_well AS
+SELECT w.well_name, ROUND(AVG(m.oil_bbl),1) AS avg_oil_bbl
+FROM monthly_production m JOIN wells w ON w.id = m.well_id
+GROUP BY w.id, w.well_name;
 
 -- 6) v6_operator_scoreboard_last_month(operator_name, active_well_count, total_oil_bbl)
 -- Hint: One CTE counts ACTIVE wells per operator; another sums last-month oil per operator; JOIN them.
